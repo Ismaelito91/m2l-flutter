@@ -1,13 +1,15 @@
+import 'dart:io';
+
+import 'package:ap4/Utilisateurs.dart';
 import 'package:flutter/material.dart';
 import 'package:ap4/API/ProduitsAPI.dart';
 import 'package:ap4/Connexion.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class Produits extends StatefulWidget {
+class Produits extends StatefulWidget { 
   const Produits({Key? key}) : super(key: key);
-
-  static const String baseUrl = "http://10.74.1.151:8000";
 
   @override
   State<Produits> createState() => _ProduitsState();
@@ -15,6 +17,9 @@ class Produits extends StatefulWidget {
 
 class _ProduitsState extends State<Produits> {
   late Future<List<dynamic>> _futureProduitsListe;
+
+  String? _image;
+  String? _error;
 
   @override
   void initState() {
@@ -24,6 +29,8 @@ class _ProduitsState extends State<Produits> {
 
   void _ajouterProduit(BuildContext context) async {
     // Créer des contrôleurs de texte pour chaque champ du formulaire
+    _error = "";
+    _image = null;
     TextEditingController nomController = TextEditingController();
     TextEditingController prixController = TextEditingController();
     TextEditingController quantiteController = TextEditingController();
@@ -32,75 +39,143 @@ class _ProduitsState extends State<Produits> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Ajouter un produit"),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: nomController,
-                  decoration:
-                      const InputDecoration(labelText: 'Nom du produit'),
-                ),
-                TextField(
-                  controller: prixController,
-                  decoration: const InputDecoration(labelText: 'Prix'),
-                  keyboardType: TextInputType.number,
-                ),
-                TextField(
-                  controller: quantiteController,
-                  decoration: const InputDecoration(labelText: 'Quantité'),
-                  keyboardType: TextInputType.number,
-                ),
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                ),
-              ],
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            title: const Text("Ajouter un produit"),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: nomController,
+                    decoration:
+                        const InputDecoration(labelText: 'Nom du produit'),
+                  ),
+                  TextField(
+                    controller: prixController,
+                    decoration: const InputDecoration(labelText: 'Prix'),
+                    keyboardType: TextInputType.number,
+                  ),
+                  TextField(
+                    controller: quantiteController,
+                    decoration: const InputDecoration(labelText: 'Quantité'),
+                    keyboardType: TextInputType.number,
+                  ),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                  ),
+                  if (_image != null) const SizedBox(height: 10),
+                  if (_image != null) Image.file(File(_image!)),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await selectImage();
+                      setState(() {
+                        _error = null;
+                      });
+                    },
+                    child: _image == null
+                        ? const Text('Sélectionner une image')
+                        : const Text('Modifier l\'image'),
+                  ),
+                  if (_error != null)
+                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text("Annuler"),
-            ),
-            TextButton(
-              onPressed: () async {
-                try {
-                  String nom = nomController.text;
-                  double prix = double.parse(prixController.text);
-                  int quantite = int.parse(quantiteController.text);
-                  String description = descriptionController.text;
-
-                  // Appeler l'API pour ajouter le produit
-                  await ProduitsAPI.addProduit(
-                      nom, prix, quantite, description);
-
-                  // Mise à jour de la liste des produits
-                  _futureProduitsListe = ProduitsAPI.getAllProduits();
-
-                  // Rafraîchir l'interface utilisateur après avoir mis à jour les données
-                  setState(() {});
-
-                  // Fermer la boîte de dialogue
+            actions: [
+              TextButton(
+                onPressed: () {
                   Navigator.of(context).pop();
-                } catch (error) {
-                  throw Exception("Erreur lors de l'ajout du produit: $error");
-                  // Afficher un message d'erreur si nécessaire
-                }
-              },
-              child: const Text("Ajouter"),
-            ),
-          ],
-        );
+                },
+                child: const Text("Annuler"),
+              ),
+              TextButton(
+                onPressed: () async {
+                  try {
+                    String nom = nomController.text;
+                    String description = descriptionController.text;
+                    if (nom.isEmpty ||
+                        description.isEmpty ||
+                        prixController.text.isEmpty ||
+                        quantiteController.text.isEmpty) {
+                      setState(() {
+                        _error = "Veuillez remplir tous les champs";
+                      });
+                      return;
+                    }
+
+                    double prix = 0;
+                    try {
+                      prix = double.parse(prixController.text);
+
+                      if (prix == 0) {
+                        setState(() {
+                          _error = "Le prix doit être supérieur à 0";
+                        });
+                        return;
+                      }
+                    } catch (e) {
+                      setState(() {
+                        _error = "Le prix doit être un nombre";
+                      });
+                      return;
+                    }
+
+                    int quantite = 0;
+                    try {
+                      quantite = int.parse(quantiteController.text);
+
+                      if (quantite == 0) {
+                        setState(() {
+                          _error = "La quantité doit être supérieure à 0";
+                        });
+                        return;
+                      }
+                    } catch (e) {
+                      setState(() {
+                        _error = "La quantité doit être un nombre";
+                      });
+                      return;
+                    }
+
+                    if (_image == null) {
+                      setState(() {
+                        _error = "Veuillez sélectionner une image";
+                      });
+                      return;
+                    }
+
+                    // Upload de la photo
+                    String imageURL = await ProduitsAPI.uploadPhoto(_image!);
+
+                    // Appeler l'API pour ajouter le produit
+                    await ProduitsAPI.addProduit(
+                        nom, prix, quantite, description, imageURL);
+
+                    // Fermer la boîte de dialogue
+                    Navigator.of(context).pop();
+                  } catch (error) {
+                    throw Exception(
+                        "Erreur lors de l'ajout du produit: $error");
+                    // Afficher un message d'erreur si nécessaire
+                  }
+                },
+                child: const Text("Ajouter"),
+              ),
+            ],
+          );
+        });
       },
-    );
+    ).then((value) {
+      // Mise à jour de la liste des produits
+      setState(() {
+        _futureProduitsListe = ProduitsAPI.getAllProduits();
+      });
+    });
   }
 
-  void _supprimerProduit(String id) async {
+  void _supprimerProduit(int id) async {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -121,12 +196,6 @@ class _ProduitsState extends State<Produits> {
                   // Supprimer le produit
                   await ProduitsAPI.supprimerProduit(id);
 
-                  // Mise à jour de la liste des produits
-                  _futureProduitsListe = ProduitsAPI.getAllProduits();
-
-                  // Rafraîchir l'interface utilisateur après avoir mis à jour les données
-                  setState(() {});
-
                   // Fermer la boîte de dialogue
                   Navigator.of(context).pop();
                 } catch (error) {
@@ -138,96 +207,199 @@ class _ProduitsState extends State<Produits> {
           ],
         );
       },
-    );
+    ).then((value) {
+      // Mise à jour de la liste des produits
+      setState(() {
+        _futureProduitsListe = ProduitsAPI.getAllProduits();
+      });
+    });
+  }
+
+  Future<void> selectImage() async {
+    String? img = await pickImage(ImageSource.gallery);
+    if (img != null) {
+      setState(() {
+        _image = img;
+      });
+    }
+  }
+
+  Future<String?> pickImage(ImageSource source) async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: source);
+
+    if (image != null) {
+      return await image.path;
+    }
+    return null;
   }
 
   void _modifierProduit(
       BuildContext context, Map<String, dynamic> produit) async {
+    _error = "";
+    _image = null;
+
     // Créer des contrôleurs de texte pour chaque champ du formulaire
     TextEditingController nomController = TextEditingController();
     TextEditingController prixController = TextEditingController();
     TextEditingController quantiteController = TextEditingController();
     TextEditingController descriptionController = TextEditingController();
 
+    // Pré-remplir les champs avec les valeurs actuelles du produit
+    nomController.text = produit['nom'];
+    prixController.text = produit['prix'].toString();
+    quantiteController.text = produit['quantite'].toString();
+    descriptionController.text = produit['description'];
+    var imageUrl = produit['image'];
+
     // Afficher une boîte de dialogue de modification en pré-remplissant les champs
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Modifier le produit"),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: nomController,
-                  decoration:
-                      const InputDecoration(labelText: 'Nom du produit'),
-                ),
-                TextField(
-                  controller: prixController,
-                  decoration: const InputDecoration(labelText: 'Prix'),
-                  keyboardType: TextInputType.number,
-                ),
-                TextField(
-                  controller: quantiteController,
-                  decoration: const InputDecoration(labelText: 'Quantité'),
-                  keyboardType: TextInputType.number,
-                ),
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                ),
-              ],
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            title: const Text("Modifier le produit"),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: nomController,
+                    decoration:
+                        const InputDecoration(labelText: 'Nom du produit'),
+                  ),
+                  TextField(
+                    controller: prixController,
+                    decoration: const InputDecoration(labelText: 'Prix'),
+                    keyboardType: TextInputType.number,
+                  ),
+                  TextField(
+                    controller: quantiteController,
+                    decoration: const InputDecoration(labelText: 'Quantité'),
+                    keyboardType: TextInputType.number,
+                  ),
+                  TextField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                  ),
+                  if (_image != null || imageUrl != null)
+                    const SizedBox(height: 10),
+                  if (_image != null) Image.file(File(_image!)),
+                  if (_image == null && imageUrl != null)
+                    Image.network(imageUrl),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await selectImage();
+                      setState(() {
+                        _error = null;
+                      });
+                    },
+                    child: _image == null && imageUrl == null
+                        ? const Text('Sélectionner une image')
+                        : const Text('Modifier l\'image'),
+                  ),
+                  if (_error != null)
+                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text("Annuler"),
-            ),
-            TextButton(
-              onPressed: () async {
-                try {
-                  // Récupérer les valeurs modifiées
-                  String? nouveauNom =
-                      nomController.text.isNotEmpty ? nomController.text : null;
-                  double? nouveauPrix = prixController.text.isNotEmpty
-                      ? double.parse(prixController.text)
-                      : null;
-                  int? nouvelleQuantite = quantiteController.text.isNotEmpty
-                      ? int.parse(quantiteController.text)
-                      : null;
-                  String? nouvelleDescription =
-                      descriptionController.text.isNotEmpty
-                          ? descriptionController.text
-                          : null;
-
-                  // Appeler la méthode de modification de produit avec les nouvelles valeurs
-                  await ProduitsAPI.modifierProduit(produit['id'], nouveauNom,
-                      nouveauPrix, nouvelleQuantite, nouvelleDescription);
-
-                  // Mise à jour de la liste des produits
-                  _futureProduitsListe = ProduitsAPI.getAllProduits();
-
-                  // Rafraîchir l'interface utilisateur après avoir mis à jour les données
-                  setState(() {});
-
-                  // Fermer la boîte de dialogue
+            actions: [
+              TextButton(
+                onPressed: () {
                   Navigator.of(context).pop();
-                } catch (error) {
-                  throw Exception(
-                      "Erreur lors de la modification du produit: $error");
-                }
-              },
-              child: const Text("Modifier"),
-            ),
-          ],
-        );
+                },
+                child: const Text("Annuler"),
+              ),
+              TextButton(
+                onPressed: () async {
+                  try {
+                    // Vérifier la présence des champs obligatoires
+                    String nouveauNom = nomController.text;
+                    String? nouvelleDescription = descriptionController.text;
+                    if (nouveauNom.isEmpty ||
+                        nouvelleDescription.isEmpty ||
+                        prixController.text.isEmpty ||
+                        quantiteController.text.isEmpty) {
+                      setState(() {
+                        _error = "Veuillez remplir tous les champs";
+                      });
+                      return;
+                    }
+
+                    double nouveauPrix = 0;
+                    try {
+                      nouveauPrix = double.parse(prixController.text);
+
+                      if (nouveauPrix == 0) {
+                        setState(() {
+                          _error = "Le prix doit être supérieur à 0";
+                        });
+                        return;
+                      }
+                    } catch (e) {
+                      setState(() {
+                        _error = "Le prix doit être un nombre";
+                      });
+                      return;
+                    }
+
+                    int? nouvelleQuantite = 0;
+                    try {
+                      nouvelleQuantite = int.parse(quantiteController.text);
+
+                      if (nouvelleQuantite == 0) {
+                        setState(() {
+                          _error = "La quantité doit être supérieure à 0";
+                        });
+                        return;
+                      }
+                    } catch (e) {
+                      setState(() {
+                        _error = "La quantité doit être un nombre";
+                      });
+                      return;
+                    }
+
+                    if (_image == null && imageUrl == null) {
+                      setState(() {
+                        _error = "Veuillez sélectionner une image";
+                      });
+                      return;
+                    }
+
+                    // Upload de la photo
+                    if (_image != null) {
+                      imageUrl = await ProduitsAPI.uploadPhoto(_image!);
+                    }
+
+                    // Appeler la méthode de modification de produit avec les nouvelles valeurs
+                    await ProduitsAPI.modifierProduit(
+                        produit['id'],
+                        nouveauNom,
+                        nouveauPrix,
+                        nouvelleQuantite,
+                        nouvelleDescription,
+                        imageUrl);
+
+                    // Fermer la boîte de dialogue
+                    Navigator.of(context).pop();
+                  } catch (error) {
+                    throw Exception(
+                        "Erreur lors de la modification du produit: $error");
+                  }
+                },
+                child: const Text("Modifier"),
+              ),
+            ],
+          );
+        });
       },
-    );
+    ).then((value) {
+      // Mise à jour de la liste des produits
+      setState(() {
+        _futureProduitsListe = ProduitsAPI.getAllProduits();
+      });
+    });
   }
 
   void _deconnexion() async {
@@ -254,6 +426,17 @@ class _ProduitsState extends State<Produits> {
           icon: const Icon(Icons.exit_to_app),
           onPressed: _deconnexion,
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.people),
+            onPressed: () {
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const Utilisateurs()));
+            },
+          ),
+        ],
       ),
       body: _buildProduitsList(),
       backgroundColor: const Color(0xFFDBDED0),
@@ -296,12 +479,12 @@ class _ProduitsState extends State<Produits> {
                       Container(
                         width: MediaQuery.of(context).size.width,
                         child: Image.network(
-                          '${Produits.baseUrl}/images/${produit['id']}.png',
+                          produit['image'],
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
                             // En cas d'erreur de chargement, afficher l'image par défaut
                             return Image.network(
-                              '${Produits.baseUrl}/images/default_image.png',
+                              'https://via.placeholder.com/150',
                               fit: BoxFit.cover,
                             );
                           },

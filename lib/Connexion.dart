@@ -34,16 +34,16 @@ class _ConnexionState extends State<Connexion> {
           Map<String, dynamic> decodedToken = JwtDecoder.decode(token);
 
           // Récupérer l'ID de l'utilisateur à partir du token
-          String userId = decodedToken['userId'];
+          int userId = decodedToken['userId'];
 
           // Récupérer le rôle de l'utilisateur à partir de l'ID
           String role = await ConnexionAPI.getUserRole(userId);
 
-          if (role == '1') {
+          if (role == 'admin') {
             // Si l'utilisateur est un administrateur, naviguer vers la prochaine page
             Navigator.push(context,
                 MaterialPageRoute(builder: (context) => const Produits()));
-          } else if (role == '0') {
+          } else if (role == 'joueur') {
             // Si l'utilisateur n'est pas un administrateur, afficher un message d'erreur
             showDialog(
               context: context,

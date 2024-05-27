@@ -1,14 +1,22 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-class ProduitsAPI {
-  static const String baseUrl = "http://10.74.1.151:8000";
+import 'constants.dart';
 
+class ProduitsAPI {
   static Future<List<dynamic>> getAllProduits() async {
     try {
-      var res =
-          await http.get(Uri.parse("$baseUrl/api/produits/getAllProduits"));
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('token');
+
+      var res = await http.get(
+        Uri.parse("$baseUrl/api/admin/getAllProducts"),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
       if (res.statusCode == 200) {
         final List<dynamic> produitsList = jsonDecode(res.body);
         return produitsList;
@@ -20,8 +28,8 @@ class ProduitsAPI {
     }
   }
 
-  static Future<void> addProduit(
-      String nom, double prix, int quantite, String description) async {
+  static Future<void> addProduit(String nom, double prix, int quantite,
+      String description, String? imageURL) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('token');
@@ -32,16 +40,17 @@ class ProduitsAPI {
       }
 
       final response = await http.post(
-        Uri.parse("$baseUrl/api/adminProduits/addProduitFlutter"),
+        Uri.parse("$baseUrl/api/admin/produits"),
         headers: <String, String>{
           'Content-Type': 'application/json; charset=UTF-8',
-          'authorization': token,
+          'Authorization': 'Bearer $token',
         },
         body: jsonEncode(<String, dynamic>{
           'nom': nom,
           'prix': prix,
           'quantite': quantite,
           'description': description,
+          'image': imageURL,
         }),
       );
       if (response.statusCode != 200) {
@@ -52,7 +61,7 @@ class ProduitsAPI {
     }
   }
 
-  static Future<void> supprimerProduit(String id) async {
+  static Future<void> supprimerProduit(int id) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('token');
@@ -63,9 +72,9 @@ class ProduitsAPI {
       }
 
       final response = await http.delete(
-        Uri.parse("$baseUrl/api/adminProduits/deleteProduit/$id"),
+        Uri.parse("$baseUrl/api/admin/produits/$id"),
         headers: {
-          'authorization': token,
+          'Authorization': 'Bearer $token',
         },
       );
       if (response.statusCode != 200 && response.statusCode != 404) {
@@ -76,8 +85,32 @@ class ProduitsAPI {
     }
   }
 
-  static Future<void> modifierProduit(String id, String? nom, double? prix,
-      int? quantite, String? description) async {
+  static Future<String> uploadPhoto(String photo) async {
+    try {
+      final dio = Dio();
+      dio.options.contentType = "multipart/form-data";
+      final multiPartFile = await MultipartFile.fromFile(
+        photo,
+        filename: photo.split('/').last,
+      );
+      FormData formData = FormData.fromMap({
+        "file": multiPartFile,
+      });
+      final response = await dio.post(
+        "$baseUrl/api/produits/upload",
+        data: formData,
+      );
+      if (response.statusCode != 200) {
+        throw Exception("Erreur serveur: ${response.statusCode}");
+      }
+      return baseUrl + "/images/" + response.data['image'];
+    } catch (err) {
+      throw Exception("Erreur lors de l'envoi de la photo: $err");
+    }
+  }
+
+  static Future<void> modifierProduit(int id, String? nom, double? prix,
+      int? quantite, String? description, String? imageURL) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       String? token = prefs.getString('token');
@@ -91,12 +124,13 @@ class ProduitsAPI {
       if (prix != null) requestBody['prix'] = prix;
       if (quantite != null) requestBody['quantite'] = quantite;
       if (description != null) requestBody['description'] = description;
+      if (imageURL != null) requestBody['image'] = imageURL;
 
       final response = await http.put(
-        Uri.parse("$baseUrl/api/adminProduits/editProduit/$id"),
+        Uri.parse("$baseUrl/api/admin/produits/$id"),
         headers: <String, String>{
           'Content-Type': 'application/json; charset=UTF-8',
-          'authorization': token,
+          'Authorization': 'Bearer $token',
         },
         body: jsonEncode(requestBody), // Utiliser le corps de requête construit
       );
