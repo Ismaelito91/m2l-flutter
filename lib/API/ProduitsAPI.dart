@@ -94,7 +94,7 @@ class ProduitsAPI {
         filename: photo.split('/').last,
       );
       FormData formData = FormData.fromMap({
-        "file": multiPartFile,
+        "image": multiPartFile,
       });
       final response = await dio.post(
         "$baseUrl/api/produits/upload",
